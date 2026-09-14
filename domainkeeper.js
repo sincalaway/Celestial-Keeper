@@ -1054,7 +1054,8 @@ function categorizeDomains(domains) {
     return { cfTopLevel: [], cfSecondLevelAndCustom: [] };
   }
   return domains.reduce((acc, domain) => {
-    if (domain.system === 'Cloudflare' && domain.domain.split('.').length === 2) {
+    // 只要是 Cloudflare 来源的资产，均纳入主表管理
+    if (domain.system === 'Cloudflare') {
       acc.cfTopLevel.push(domain);
     } else {
       acc.cfSecondLevelAndCustom.push(domain);
