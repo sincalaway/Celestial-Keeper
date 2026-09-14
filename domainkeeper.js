@@ -404,24 +404,39 @@ async function fetchWhoisInfo(domain, env) {
       if (!response.ok) continue;
 
       const whoisData = await response.json();
+      if (!whoisData) continue;
 
-      if (whoisData) {
-        const registrar = whoisData.registrar || 
-                          (whoisData.records && whoisData.records.registrar) || 
-                          'Cloudflare';
-        const creationDate = whoisData.creationDate || 
-                             (whoisData.records && whoisData.records.created_at) || 
-                             null;
-        const expirationDate = whoisData.expirationDate || 
-                              (whoisData.records && whoisData.records.expires_at) || 
-                              null;
+      let creationDate = null;
+      let expirationDate = null;
+      let registrar = 'Cloudflare';
 
-        return {
-          registrar: registrar,
-          registrationDate: formatDate(creationDate) || 'Unknown',
-          expirationDate: formatDate(expirationDate) || 'Unknown'
-        };
+      // 1. 标准 RDAP 格式解析 (适配 rdap.org)
+      if (Array.isArray(whoisData.events)) {
+        for (const ev of whoisData.events) {
+          if (ev.eventAction === 'registration') creationDate = ev.eventDate;
+          if (ev.eventAction === 'expiration') expirationDate = ev.eventDate;
+        }
       }
+
+      // 2. 提取注册商 (RDAP entities)
+      if (Array.isArray(whoisData.entities)) {
+        const regEntity = whoisData.entities.find(e => Array.isArray(e.roles) && e.roles.includes('registrar'));
+        if (regEntity && regEntity.vcardArray && regEntity.vcardArray[1]) {
+          const fn = regEntity.vcardArray[1].find(item => item[0] === 'fn');
+          if (fn && fn[3]) registrar = fn[3];
+        }
+      }
+
+      // 3. 第三方扁平 JSON 格式兜底 (适配 NetworkCalc / WhoisXML 等)
+      creationDate = creationDate || whoisData.creationDate || (whoisData.records && whoisData.records.created_at) || null;
+      expirationDate = expirationDate || whoisData.expirationDate || (whoisData.records && whoisData.records.expires_at) || null;
+      registrar = registrar || whoisData.registrar || (whoisData.records && whoisData.records.registrar) || 'Cloudflare';
+
+      return {
+        registrar: registrar,
+        registrationDate: formatDate(creationDate) || 'Unknown',
+        expirationDate: formatDate(expirationDate) || 'Unknown'
+      };
     } catch (error) {
       continue;
     }
